@@ -1,0 +1,239 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+
+    <style type="text/css">
+        .start {
+            padding: 10px;
+            border: 1px solid black;
+            background: #ccc;
+            cursor: pointer;
+            width: 100px;
+            margin-bottom: 20px;
+        }
+
+        .tweet {
+            position: absolute;
+            bottom: 5px;
+            padding-bottom: 0;
+            padding-top: 0;
+            margin-top: 0;
+            margin-bottom: 0;
+
+        }
+
+        .search-term {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font: italic bold 45px Andale Mono, serif;
+            color: #666666
+        }
+
+        .twitter-tweet {
+            margin-top: 1px !important;
+            margin-bottom: 1px !important;
+        }
+
+        .header {
+            position: absolute;
+            padding-bottom: 0;
+            padding-top: 0;
+            margin-top: 0;
+            margin-bottom: 0;
+            font: italic bold 30px Andale Mono, serif;
+
+        }
+
+
+
+
+    </style>
+
+
+</head>
+
+<script src="https://platform.twitter.com/widgets.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<body>
+
+<div>
+    <div id="positive" class="header"></div>
+    <div id="neutral" class="header"></div>
+    <div id="negative" class="header"></div>
+</div>
+
+<div class="start" id="start">Start</div>
+
+<div class="search-term">pending...</div>
+
+<div id="container"></div>
+
+
+<script type="text/javascript">
+
+    var tweetWidth = 350;
+    var cols = 3;
+    var padding = 15;
+
+    var topMargin = 45;
+    var colElements = {};
+
+    var itemQueue = [];
+
+    var shiftUpIndex;
+    var shiftNewHeight;
+
+    $(document).ready(function () {
+
+
+        var width = $(window).width();
+        var colOffset = (width - (2 * padding) - tweetWidth ) / (cols - 1);
+
+        for (i = 0; i < cols; i++) {
+            colElements[i] = [];
+        }
+
+        function buildTweet(item, container) {
+            $("#" + container).append("<div class='tweet' id='t" + item.id + "'></div>");
+            twttr.widgets.createTweet(
+                    item.id,
+                    document.getElementById("t" + item.id),
+                    {
+                        theme: 'light',
+                        cards: 'hidden',
+                        conversation: 'none',
+                        width: tweetWidth.toString()
+                    }
+            ).then(function () {
+
+                setTimeout(cleanup(item), 10);
+            });
+
+        }
+
+        function fetchTweet() {
+            console.log("Fetching items");
+            $.ajax("/tweets")
+                    .done(function (data) {
+                        console.log("Got " + data.length + " item(s)");
+                        data.forEach(function (item) {
+                            itemQueue.push(item)
+                        });
+                        setTimeout(displayNewTweet(), 10);
+
+                    });
+
+        }
+
+        function displayNewTweet() {
+            if (itemQueue.length > 0) {
+                var item = itemQueue.shift();
+                buildTweet(item, 'container');
+            } else {
+                fetchTweet();
+            }
+
+        }
+
+        function cleanup(item) {
+
+            var currentColIndex = item.cluster;
+
+
+
+            var elementList = colElements[currentColIndex];
+            if (elementList.length > 2) {
+                elementList.shift().remove(); // Remove first element
+                shiftNewHeight = topMargin;
+                shiftUpIndex = 0;
+                setTimeout(shiftUp(item, currentColIndex), 100);
+
+            } else {
+                setTimeout(arrange(item, currentColIndex), 100);
+            }
+        }
+
+        //Shift up every element in a column
+        function shiftUp(item, currentColIndex) {
+            var elementList = colElements[currentColIndex];
+
+            if (shiftUpIndex == elementList.length) {
+                //Continue to arrange the new element
+                setTimeout(arrange(item, currentColIndex), 100);
+            } else {
+                //Continue shifting elements up
+                e = elementList[shiftUpIndex];
+                shiftUpIndex++;
+                var xHeight = e.height();
+                e.animate({top: shiftNewHeight + 'px'}, 400, 'swing', function () {
+                    shiftNewHeight = shiftNewHeight + xHeight;
+                    e.height(xHeight);
+                    shiftUp(item, currentColIndex)
+                });
+
+
+            }
+
+        }
+
+        //Arange the new element
+        function arrange(item, currentColIndex) {
+
+            var elementList = colElements[currentColIndex];
+
+
+            var leftAlign = padding + (colOffset * (currentColIndex));
+            var element = $("#t" + item.id).first();
+
+
+            var height = elementList
+                    .map(function (x) {
+                        return x.height();
+                    })
+                    .reduce(function (a, b) {
+                        return a + b;
+                    }, 0);
+
+            height = height + topMargin;
+            var currentHeight = element.height();
+            elementList.push(element);
+            element.animate({top: height + 'px', left: leftAlign + 'px'}, 1500, 'swing', displayNewTweet);
+            element.height(currentHeight);
+
+        }
+
+        //Entry point to start displaying tweets
+        function run() {
+            displayNewTweet();
+
+        }
+
+        //Set up headers
+
+
+        $("#start").click(function () {
+            $.ajax("/query")
+                    .done(function (data) {
+                        $(".search-term").text(data)
+                    });
+
+            $("#start").hide();
+
+            $("#positive").text("Cluster #1").animate({top: '5px', left: padding + 'px'}, 500, 'swing');
+            var leftAlign2 = padding + (colOffset * (1));
+            $("#neutral").text("Cluster #2").animate({top: '5px', left: leftAlign2 + 'px'}, 500, 'swing');
+            var leftAlign3 = padding + (colOffset * (2));
+            $("#negative").text("Cluster #3").animate({top: '5px', left: leftAlign3 + 'px'}, 500, 'swing');
+
+            run();
+        });
+
+    });
+</script>
+
+</body>
+</html>
